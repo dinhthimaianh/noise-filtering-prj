@@ -1,0 +1,81 @@
+/* YOUR CODE: Complete styling for web interface */
+
+:root {
+    --primary-color: #0d6efd;
+    --success-color: #198754;
+    --danger-color: #dc3545;
+    --info-color: #0dcaf0;
+}
+
+/* Pipeline Stages */
+.pipeline-stage {
+    padding: 30px;
+    margin: 10px;
+    border-radius: 15px;
+    background: #f8f9fa;
+    border: 2px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.pipeline-stage.active {
+    background: var(--primary-color);
+    color: white;
+    transform: scale(1.05);
+}
+
+/* Environment Selection */
+.environment-card {
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.environment-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.environment-card.selected {
+    border-color: var(--success-color);
+    background: #d1e7dd;
+}
+
+/* Audio Upload */
+.upload-area {
+    border: 3px dashed #ccc;
+    padding: 40px;
+    text-align: center;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+}
+
+.upload-area:hover {
+    border-color: var(--primary-color);
+    background: #f8f9fa;
+}
+
+/* Results */
+.audio-comparison {
+    margin: 20px 0;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.metric-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .pipeline-stage {
+        margin: 5px 0;
+        padding: 20px;
+    }
+}

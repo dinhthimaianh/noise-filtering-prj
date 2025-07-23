@@ -1,0 +1,572 @@
+{% extends "base.html" %}
+
+{% block title %}Noise Filtering Demo - Trang chủ{% endblock %}
+
+{% block content %}
+<!-- Header Section -->
+<div class="text-center mb-5">
+    <h1 class="display-4 mb-3">
+        <i class="fas fa-volume-up text-primary"></i>
+        3-Stage Noise Filtering System
+    </h1>
+    <p class="lead text-muted">
+        Hệ thống lọc nhiễu thông minh với 3 stages xử lý: Analog Input → DSP Processing → Reference Output
+    </p>
+</div>
+
+<!-- Demo Interface -->
+<div class="row">
+    <!-- Left Column: Controls -->
+    <div class="col-lg-5">
+        <!-- Environment Selection -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-map-marker-alt"></i>
+                    Chọn Môi Trường
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row" id="environmentGrid">
+                    {% for env_id, config in environments.items() %}
+                    <div class="col-md-6 mb-3">
+                        <div class="environment-card" data-environment="{{ env_id }}">
+                            <div class="card h-100 border-2" style="border-color: {{ config.color }};">
+                                <div class="card-body text-center p-3">
+                                    <div class="environment-icon mb-2" style="font-size: 2rem;">{{ config.icon }}</div>
+                                    <h6 class="card-title">{{ config.name }}</h6>
+                                    <p class="card-text small text-muted">{{ config.description }}</p>
+                                    <div class="environment-stats">
+                           
+                                        <small class="text-muted d-block mt-1">
+                                            Target SNR: {{ config.target_snr_db }}dB
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Audio Input -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">
+                    <i class="fas fa-upload"></i>
+                    Audio Input
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- File Upload -->
+                <div class="upload-section mb-3">
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-content text-center p-4">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                            <h5>Kéo thả file audio vào đây</h5>
+                            <p class="text-muted">hoặc <button class="btn btn-outline-primary btn-sm" id="browseBtn">chọn file</button></p>
+                            <small class="text-muted">
+                                Hỗ trợ: WAV, MP3, FLAC (tối đa 30s, 50MB)
+                            </small>
+                        </div>
+                        <input type="file" id="audioFileInput" accept=".wav,.mp3,.flac,.m4a" style="display: none;">
+                    </div>
+                </div>
+
+                <!-- Process Button -->
+                <div class="text-center mt-4">
+                    <button class="btn btn-primary btn-lg" id="processBtn" disabled>
+                        <i class="fas fa-play"></i>
+                        Bắt Đầu Xử Lý
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Results -->
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-line"></i>
+                    Kết Quả Xử Lý
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Initial State -->
+                <div id="initialState" class="text-center py-5">
+                    <i class="fas fa-music fa-4x text-muted mb-3"></i>
+                    <h5 class="text-muted">Chờ xử lý audio</h5>
+                    <p class="text-muted">
+                        Chọn môi trường và upload file audio để bắt đầu
+                    </p>
+                </div>
+
+                <!-- Results Container -->
+                <div id="resultsContainer" style="display: none;">
+                    <!-- Processing Summary -->
+                    <div class="processing-summary mb-4">
+                        <div class="row text-center">
+                            <div class="col-3">
+                                <div class="metric-card">
+                                    <i class="fas fa-signal text-primary"></i>
+                                    <h6>SNR Improvement</h6>
+                                    <h4 id="snrImprovement" class="text-primary">0.0dB</h4>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="metric-card">
+                                    <i class="fas fa-clock text-success"></i>
+                                    <h6>Processing Time</h6>
+                                    <h4 id="processingTime" class="text-success">0.0s</h4>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="metric-card">
+                                    <i class="fas fa-rocket text-warning"></i>
+                                    <h6>Real-time Factor</h6>
+                                    <h4 id="realTimeFactor" class="text-warning">0.0x</h4>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="metric-card">
+                                    <i class="fas fa-volume-down text-info"></i>
+                                    <h6>Noise Reduction</h6>
+                                    <h4 id="noiseReduction" class="text-info">0.0dB</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Audio Comparison -->
+                    <div class="audio-comparison mb-4">
+                        <h6><i class="fas fa-headphones"></i> Audio Comparison</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="audio-player-card">
+                                    <h6 class="text-danger">
+                                        <i class="fas fa-microphone"></i> Input (Noisy)
+                                    </h6>
+                                    <audio controls class="w-100" id="inputAudio">
+                                        Your browser does not support audio.
+                                    </audio>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="audio-player-card">
+                                    <h6 class="text-warning">
+                                        <i class="fas fa-microchip"></i> DSP Processed
+                                    </h6>
+                                    <audio controls class="w-100" id="finalAudio">
+                                        Your browser does not support audio.
+                                    </audio>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Frequency Chart -->
+                    <div class="frequency-chart mb-4">
+                        <h6><i class="fas fa-chart-area"></i> Frequency Analysis</h6>
+                        <canvas id="frequencyChart" width="400" height="200"></canvas>
+                    </div>
+
+                    <!-- Download Section -->
+                    <div class="download-section text-center">
+                        <button class="btn btn-success" id="downloadBtn">
+                            <i class="fas fa-download"></i>
+                            Download Processed Audio
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Progress Modal -->
+<div class="modal fade" id="progressModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-cogs"></i>
+                    Đang Xử Lý Audio
+                </h5>
+            </div>
+            <div class="modal-body text-center">
+                <div class="progress mb-3">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" style="width: 100%"></div>
+                </div>
+                <p id="progressText">Đang khởi tạo pipeline...</p>
+                <small class="text-muted">Vui lòng chờ trong giây lát</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Global variables (SIMPLIFIED)
+let selectedEnvironment = null;
+let uploadedFile = null;
+let processingResults = null;
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    initializeEventListeners();
+    // Select default environment
+    selectEnvironment('office');
+});
+
+function initializeEventListeners() {
+    // Environment selection
+    document.querySelectorAll('.environment-card').forEach(card => {
+        card.addEventListener('click', function() {
+            const environment = this.dataset.environment;
+            selectEnvironment(environment);
+        });
+    });
+
+    // File upload
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('audioFileInput');
+    const browseBtn = document.getElementById('browseBtn');
+
+    browseBtn.addEventListener('click', () => fileInput.click());
+    
+    uploadArea.addEventListener('dragover', handleDragOver);
+    uploadArea.addEventListener('drop', handleFileDrop);
+    fileInput.addEventListener('change', handleFileSelect);
+
+    // Demo buttons
+    document.querySelectorAll('[data-demo]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const environment = this.dataset.demo;
+            generateSampleAudio(environment);
+        });
+    });
+
+    // Process button
+    document.getElementById('processBtn').addEventListener('click', processAudio);
+}
+
+function selectEnvironment(environment) {
+    // Remove previous selection
+    document.querySelectorAll('.environment-card .card').forEach(card => {
+        card.classList.remove('border-primary', 'bg-light');
+    });
+
+    // Add selection to new environment
+    const selectedCard = document.querySelector(`[data-environment="${environment}"] .card`);
+    selectedCard.classList.add('border-primary', 'bg-light');
+
+    selectedEnvironment = environment;
+    updateProcessButton();
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    this.classList.add('drag-over');
+}
+
+function handleFileDrop(e) {
+    e.preventDefault();
+    this.classList.remove('drag-over');
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        handleFile(files[0]);
+    }
+}
+
+function handleFileSelect(e) {
+    if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+    }
+}
+
+function handleFile(file) {
+    // Validate file type
+    const allowedTypes = ['audio/wav', 'audio/mpeg', 'audio/flac', 'audio/mp4'];
+    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(wav|mp3|flac|m4a)$/i)) {
+        showAlert('File không được hỗ trợ. Vui lòng chọn file WAV, MP3, FLAC hoặc M4A.', 'danger');
+        return;
+    }
+
+    // Validate file size (50MB)
+    if (file.size > 50 * 1024 * 1024) {
+        showAlert('File quá lớn. Vui lòng chọn file nhỏ hơn 50MB.', 'danger');
+        return;
+    }
+
+    uploadedFile = file;
+    
+    // Update upload area
+    const uploadContent = document.querySelector('.upload-content');
+    uploadContent.innerHTML = `
+        <i class="fas fa-file-audio fa-3x text-success mb-3"></i>
+        <h5 class="text-success">${file.name}</h5>
+        <p class="text-muted">File size: ${formatFileSize(file.size)}</p>
+        <button class="btn btn-outline-secondary btn-sm" onclick="clearFile()">Chọn file khác</button>
+    `;
+
+    updateProcessButton();
+}
+
+function clearFile() {
+    uploadedFile = null;
+    document.getElementById('audioFileInput').value = '';
+    
+    // Reset upload area
+    const uploadContent = document.querySelector('.upload-content');
+    uploadContent.innerHTML = `
+        <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+        <h5>Kéo thả file audio vào đây</h5>
+        <p class="text-muted">hoặc <button class="btn btn-outline-primary btn-sm" id="browseBtn">chọn file</button></p>
+        <small class="text-muted">Hỗ trợ: WAV, MP3, FLAC (tối đa 30s, 50MB)</small>
+    `;
+    
+    // Re-attach browse button event
+    document.getElementById('browseBtn').addEventListener('click', () => {
+        document.getElementById('audioFileInput').click();
+    });
+
+    updateProcessButton();
+}
+
+function generateSampleAudio(environment) {
+    showAlert('Đang tạo audio mẫu...', 'info');
+    
+    fetch(`/api/generate-sample/${environment}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                uploadedFile = { 
+                    name: `sample_${environment}.wav`, 
+                    size: 1024 * 100,
+                    type: 'audio/wav'
+                };
+                
+                selectEnvironment(environment);
+                
+                const uploadContent = document.querySelector('.upload-content');
+                uploadContent.innerHTML = `
+                    <i class="fas fa-file-audio fa-3x text-info mb-3"></i>
+                    <h5 class="text-info">Sample Audio - ${data.environment_name}</h5>
+                    <p class="text-muted">Duration: ${data.duration}s</p>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="clearFile()">Chọn file khác</button>
+                `;
+                
+                updateProcessButton();
+                showAlert('Audio mẫu đã sẵn sàng!', 'success');
+            } else {
+                showAlert('Lỗi tạo audio mẫu: ' + data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            showAlert('Lỗi kết nối: ' + error.message, 'danger');
+        });
+}
+
+function updateProcessButton() {
+    const processBtn = document.getElementById('processBtn');
+    const canProcess = selectedEnvironment && uploadedFile;
+    
+    processBtn.disabled = !canProcess;
+    
+    if (canProcess) {
+        processBtn.innerHTML = '<i class="fas fa-play"></i> Bắt Đầu Xử Lý';
+        processBtn.className = 'btn btn-primary btn-lg';
+    } else {
+        processBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Chọn môi trường và file audio';
+        processBtn.className = 'btn btn-secondary btn-lg';
+    }
+}
+
+function processAudio() {
+    if (!selectedEnvironment || !uploadedFile) {
+        showAlert('Vui lòng chọn môi trường và file audio.', 'warning');
+        return;
+    }
+
+    // Show progress modal
+    const progressModal = new bootstrap.Modal(document.getElementById('progressModal'));
+    progressModal.show();
+
+    // Prepare form data (SIMPLIFIED - NO DEVICE)
+    const formData = new FormData();
+    
+    if (uploadedFile.type) {
+        formData.append('audio_file', uploadedFile);
+    } else {
+        const dummyBlob = new Blob([''], { type: 'audio/wav' });
+        formData.append('audio_file', dummyBlob, uploadedFile.name);
+    }
+    
+    formData.append('environment', selectedEnvironment);
+    // Remove: formData.append('output_device', selectedDevice);
+
+    // Simulate processing steps
+    const steps = [
+        'Đang load audio file...',
+        'Stage 1: Analog Input (Mic simulation)...',
+        'Stage 2: DSP Processing...',
+        'Stage 3: Reference Output Conditioning...',
+        'Đang tính toán metrics...',
+        'Hoàn thành!'
+    ];
+
+    let currentStep = 0;
+    const progressText = document.getElementById('progressText');
+    
+    const stepInterval = setInterval(() => {
+        if (currentStep < steps.length) {
+            progressText.textContent = steps[currentStep];
+            currentStep++;
+        } else {
+            clearInterval(stepInterval);
+        }
+    }, 800);
+
+    // Actual API call
+    fetch('/api/process-audio', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        clearInterval(stepInterval);
+        progressModal.hide();
+
+        if (data.success) {
+            displayResults(data);
+            showAlert('Xử lý hoàn thành thành công!', 'success');
+        } else {
+            showAlert('Lỗi xử lý: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        clearInterval(stepInterval);
+        progressModal.hide();
+        showAlert('Lỗi kết nối: ' + error.message, 'danger');
+    });
+}
+
+function displayResults(data) {
+    processingResults = data;
+
+    // Hide initial state, show results
+    document.getElementById('initialState').style.display = 'none';
+    document.getElementById('resultsContainer').style.display = 'block';
+
+    // Update metrics
+    document.getElementById('snrImprovement').textContent = 
+        data.quality_metrics.estimated_snr_improvement_db.toFixed(1) + 'dB';
+    document.getElementById('processingTime').textContent = 
+        data.processing_metadata.total_time.toFixed(3) + 's';
+    document.getElementById('realTimeFactor').textContent = 
+        data.processing_metadata.real_time_factor.toFixed(1) + 'x';
+    document.getElementById('noiseReduction').textContent = 
+        Math.abs(data.quality_metrics.estimated_noise_reduction_db || 0).toFixed(1) + 'dB';
+
+    // Update audio players (SIMPLIFIED LABELS)
+    document.getElementById('inputAudio').src = data.file_paths.input_noisy;
+    document.getElementById('finalAudio').src = data.file_paths.final_output;
+
+    // Update frequency chart
+    updateFrequencyChart(data.frequency_analysis);
+
+    // Update download button
+    document.getElementById('downloadBtn').onclick = () => {
+        window.open(data.file_paths.final_output, '_blank');
+    };
+}
+
+function updateFrequencyChart(frequencyData) {
+    const ctx = document.getElementById('frequencyChart').getContext('2d');
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: frequencyData.frequencies.map(f => f.toFixed(0) + ' Hz'),
+            datasets: [{
+                label: 'Input (Noisy)',
+                data: frequencyData.input_spectrum,
+                borderColor: '#E74C3C',
+                backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                tension: 0.1
+            },  {
+                label: 'Final Output',
+                data: frequencyData.final_output_spectrum,
+                borderColor: '#27AE60',
+                backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Frequency Domain Analysis'
+                },
+                legend: {
+                    display: true,
+                    position: 'top'
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Frequency (Hz)'
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Magnitude (dB)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Utility functions (giữ nguyên)
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+
+function formatFileSize(bytes) {
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    if (bytes === 0) return '0 B';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+}
+</script>
+{% endblock %}

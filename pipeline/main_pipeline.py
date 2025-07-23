@@ -1,109 +1,128 @@
 """
-Main Audio Processing Pipeline
-Coordinates all 6 stages of processing with comprehensive error handling and monitoring
+ Main Pipeline Controller - OPTIMIZED VERSION
+Fast 3-stage processing với performance optimization
 """
 
 import numpy as np
 import logging
 import time
-from typing import Dict, Any, Optional, List
-import warnings
-
-from utils.config import ENVIRONMENT_CONFIGS
-
-
-# Import all processing stages
-from .stages.analog_filter import AnalogFilter
-from .stages.adc import ADC
-from .stages.dsp_processor import DSPProcessor
-from .stages.dac import DAC
-from .stages.reconstruction import ReconstructionFilter
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+from typing import Dict, Any
+from pipeline.metrics import generate_quality_report
 logger = logging.getLogger(__name__)
 
 class AudioProcessingPipeline:
     """
-    Main pipeline coordinator for 6-stage audio processing
-    Provides comprehensive processing with monitoring and error recovery
+    Fast audio processing pipeline với optimized performance
     """
     
     def __init__(self):
-        logger.info("Initializing Audio Processing Pipeline v1.0")
+        logger.info(" Khởi tạo Audio Processing Pipeline")
         
-        # Initialize all processing stages
+        # Import stages once
+        from .stages.dsp_processor import DSPProcessor
+        
+        # Initialize stages
         try:
-            self.analog_filter = AnalogFilter()
-            self.adc = ADC()
             self.dsp_processor = DSPProcessor()
-            self.dac = DAC()
-            self.reconstruction_filter = ReconstructionFilter()
-            logger.info(" All processing stages initialized successfully")
+            logger.info(" Stage 2: Fast DSP Processor initialized")
+
+            
         except Exception as e:
             logger.error(f" Stage initialization failed: {e}")
             raise
         
-
-    def process_audio(self, audio_input: np.ndarray, environment: str, 
-                     sample_rate: int = 44100, monitor_performance: bool = True) -> Dict[str, Any]:
+        # Performance tracking
+        self.processing_times = {}
+        self.total_processed = 0
+        
+        # Set logging level cho production performance
+        logging.getLogger().setLevel(logging.INFO)  # Reduce logging overhead
+        
+        logger.info(" Pipeline ready for high-performance processing")
+    
+    def process_audio(self, noisy_input: np.ndarray, environment: str,
+                     sample_rate: int = 44100) -> Dict[str, Any]:
         """
-        Main processing function - coordinates all 6 stages
+        OPTIMIZED 2-stage audio processing
         
         Args:
-            audio_input: Raw audio signal (from microphone/file)
-            environment: Selected environment type
-            sample_rate: Sample rate of input audio
-            monitor_performance: Enable performance monitoring
+            noisy_input: Input signal với noise
+            environment: Environment type
+            sample_rate: Sample rate
             
         Returns:
-            Dict containing processed audio and comprehensive metadata
+            Complete processing results
         """
+        processing_start = time.time()
         
-        processing_start_time = time.time()
-
-        logger.info("="*60)
-        logger.info("STARTING AUDIO PROCESSING PIPELINE")
-        logger.info(f"Environment: {environment}")
-        logger.info(f"Input: {len(audio_input)} samples at {sample_rate} Hz")
-        logger.info(f"Duration: {len(audio_input)/sample_rate:.2f}s")
-        logger.info("="*60)
+        audio_duration = len(noisy_input) / sample_rate
+        logger.info(f" FAST processing: {len(noisy_input)} samples ({audio_duration:.1f}s), {environment}")
         
         try:
-            # Input validation
-            self._validate_inputs(audio_input, environment, sample_rate)
-           
+
+            # ============ STAGE 2: FAST DSP PROCESSING ============ HIỂU CODE Ở ĐÂY
+            
+            
+            
+            
+            
+            
+            
+            stage2_start = time.time()
+            final_output = self.dsp_processor.process(
+                noisy_signal=noisy_input,
+                environment=environment,
+                sample_rate=sample_rate
+            )
+            stage2_time = time.time() - stage2_start
+            self.processing_times['stage2_dsp'] = stage2_time
+            
+            # ============ FAST METRICS CALCULATION ============
+            metrics_start = time.time()
+            metrics =  generate_quality_report(noisy_input, final_output)
+            metrics_time = time.time() - metrics_start
+            
+            # ============ PERFORMANCE CALCULATION ============
+            total_time = time.time() - processing_start
+            real_time_factor = audio_duration / total_time
+            
+            # ============ RESULTS ASSEMBLY ============
+            results = {
+                # Audio stages
+                'input_noisy': noisy_input,
+                'mic_processed': noisy_input,
+                'final_output': final_output,
+                'estimated_clean': final_output,  # Use DSP output as clean estimate
+                
+                # Metadata
+                'environment': environment,
+                'sample_rate': sample_rate,
+                
+                # Performance metrics
+                'processing_metadata': {
+                    'total_processing_time': total_time,
+                    'stage_times': self.processing_times.copy(),
+                    'metrics_time': metrics_time,
+                    'real_time_factor': real_time_factor,
+                    'latency_ms': total_time * 1000,
+                    'audio_duration_s': audio_duration,
+                    'processing_efficiency_percent': (audio_duration / total_time) * 100,
+                },
+                
+                # Quality metrics
+                'quality_metrics': metrics
+            }
+            
+            # ============ PERFORMANCE LOGGING ============
+            self.total_processed += 1
+            
+            logger.info(f" FAST processing complete:")
+            logger.info(f"     Total time: {total_time:.3f}s")
+            logger.info(f"    Real-time factor: {real_time_factor:.1f}x")
+            logger.info(f"    SNR improvement: {metrics['estimated_snr_improvement_db']:.1f}dB")
+            
+            return results
             
         except Exception as e:
-            logger.error(f"CRITICAL ERROR in audio processing pipeline: {str(e)}")
-            logger.error(f"Processing failed after {time.time() - processing_start_time:.3f} seconds")
+            logger.error(f" Fast pipeline processing failed: {e}")
             raise
-    
-    def _validate_inputs(self, audio_input: np.ndarray, environment: str, sample_rate: int):
-        """Comprehensive input validation"""
-        
-        # Audio validation
-        if len(audio_input) == 0:
-            raise ValueError("Empty audio input")
-        
-        if not np.isfinite(audio_input).all():
-            raise ValueError("Audio contains invalid values (NaN or infinity)")
-        
-        if np.max(np.abs(audio_input)) == 0:
-            logger.warning("Input signal is silent")
-        
-        # Environment validation
-        if environment not in ENVIRONMENT_CONFIGS:
-            raise ValueError(f"Unknown environment: {environment}")
-        
-        # Sample rate validation
-        if sample_rate <= 0 or sample_rate > 192000:
-            raise ValueError(f"Invalid sample rate: {sample_rate}")
-        
-        # Real-time constraint checking
-        if self.real_time_mode:
-            duration_ms = len(audio_input) / sample_rate * 1000
-            if duration_ms > self.max_latency_ms * 10:  # Allow 10x latency for processing
-                logger.warning(f"Input duration {duration_ms:.1f}ms may exceed real-time constraints")
-    
-   
