@@ -196,6 +196,7 @@
                     <i class="fas fa-cogs"></i>
                     Đang Xử Lý Audio
                 </h5>
+                <button type="button" class="btn-close btn-close-white" id="forceCloseModal" aria-label="Close" style="display: none;"></button>
             </div>
             <div class="modal-body text-center">
                 <div class="progress mb-3">
@@ -204,6 +205,9 @@
                 </div>
                 <p id="progressText">Đang khởi tạo pipeline...</p>
                 <small class="text-muted">Vui lòng chờ trong giây lát</small>
+                <div class="mt-3">
+                    <button type="button" class="btn btn-sm btn-outline-light" id="debugModalBtn" onclick="debugModal()" style="display: none;">Debug Modal</button>
+                </div>
             </div>
         </div>
     </div>
@@ -254,7 +258,10 @@ function initializeEventListeners() {
     });
 
     // Process button
-    document.getElementById('processBtn').addEventListener('click', processAudio);
+    document.getElementById('processBtn').addEventListener('click', function() {
+        console.log('Process button clicked');
+        processAudio();
+    });
 }
 
 function selectEnvironment(environment) {
@@ -392,14 +399,33 @@ function updateProcessButton() {
 }
 
 function processAudio() {
+    console.log('processAudio called');
+    console.log('selectedEnvironment:', selectedEnvironment);
+    console.log('uploadedFile:', uploadedFile);
+    
     if (!selectedEnvironment || !uploadedFile) {
         showAlert('Vui lòng chọn môi trường và file audio.', 'warning');
         return;
     }
 
-    // Show progress modal
-    const progressModal = new bootstrap.Modal(document.getElementById('progressModal'));
+    console.log('Starting audio processing...');
+
+    // Show progress modal with fresh instance
+    const progressModalElement = document.getElementById('progressModal');
+    
+    // Ensure modal is completely reset before showing
+    progressModalElement.style.display = '';
+    progressModalElement.classList.remove('show');
+    progressModalElement.setAttribute('aria-hidden', 'true');
+    progressModalElement.removeAttribute('aria-modal');
+    progressModalElement.removeAttribute('role');
+    
+    const progressModal = new bootstrap.Modal(progressModalElement, {
+        backdrop: 'static',
+        keyboard: false
+    });
     progressModal.show();
+    console.log('Progress modal shown');
 
     // Prepare form data (SIMPLIFIED - NO DEVICE)
     const formData = new FormData();
@@ -436,15 +462,94 @@ function processAudio() {
         }
     }, 800);
 
+    // Function to safely hide modal
+    function hideProgressModal() {
+        console.log('Attempting to hide progress modal...');
+        try {
+            clearInterval(stepInterval);
+            
+            // Try Bootstrap's hide method first
+            progressModal.hide();
+            console.log('Modal hide() called successfully');
+            
+            // Force hide the modal immediately with multiple approaches
+            setTimeout(() => {
+                // Method 1: Bootstrap disposal
+                try {
+                    progressModal.dispose();
+                    console.log('Modal disposed');
+                } catch (e) {
+                    console.log('Modal dispose failed:', e);
+                }
+                
+                // Method 2: Direct DOM manipulation
+                progressModalElement.style.display = 'none';
+                progressModalElement.classList.remove('show', 'fade');
+                progressModalElement.setAttribute('aria-hidden', 'true');
+                progressModalElement.removeAttribute('aria-modal');
+                progressModalElement.removeAttribute('role');
+                
+                // Method 3: Remove backdrop
+                const backdrop = document.querySelector('.modal-backdrop');
+                if (backdrop) {
+                    console.log('Removing modal backdrop');
+                    backdrop.remove();
+                }
+                
+                // Method 4: Reset body styles
+                document.body.classList.remove('modal-open');
+                document.body.style.removeProperty('overflow');
+                document.body.style.removeProperty('padding-right');
+                
+                console.log('Modal force cleanup completed');
+            }, 100);
+            
+        } catch (error) {
+            console.error('Error hiding modal:', error);
+            // Aggressive fallback: force remove everything
+            progressModalElement.style.display = 'none';
+            progressModalElement.classList.remove('show', 'fade');
+            progressModalElement.setAttribute('aria-hidden', 'true');
+            progressModalElement.removeAttribute('aria-modal');
+            progressModalElement.removeAttribute('role');
+            
+            const backdrop = document.querySelector('.modal-backdrop');
+            if (backdrop) backdrop.remove();
+            
+            document.body.classList.remove('modal-open');
+            document.body.style.removeProperty('overflow');
+            document.body.style.removeProperty('padding-right');
+            console.log('Fallback modal cleanup completed');
+        }
+    }
+
     // Actual API call
+    console.log('Making API call to /api/process-audio');
+    
+    // Set a timeout to show debug options if modal doesn't close
+    const debugTimeout = setTimeout(() => {
+        console.log('Modal still visible after 10 seconds, showing debug options');
+        document.getElementById('debugModalBtn').style.display = 'block';
+        document.getElementById('forceCloseModal').style.display = 'block';
+        document.getElementById('forceCloseModal').onclick = forceCloseModal;
+    }, 10000);
+    
     fetch('/api/process-audio', {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('API response received:', response.status);
+        clearTimeout(debugTimeout);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
-        clearInterval(stepInterval);
-        progressModal.hide();
+        console.log('API data received:', data.success ? 'SUCCESS' : 'ERROR');
+        clearTimeout(debugTimeout);
+        hideProgressModal();
 
         if (data.success) {
             displayResults(data);
@@ -454,8 +559,9 @@ function processAudio() {
         }
     })
     .catch(error => {
-        clearInterval(stepInterval);
-        progressModal.hide();
+        console.error('Processing error:', error);
+        clearTimeout(debugTimeout);
+        hideProgressModal();
         showAlert('Lỗi kết nối: ' + error.message, 'danger');
     });
 }
@@ -490,10 +596,14 @@ function displayResults(data) {
     };
 }
 
+let frequencyChartInstance = null; // Biến toàn cục lưu chart
 function updateFrequencyChart(frequencyData) {
     const ctx = document.getElementById('frequencyChart').getContext('2d');
-    
-    new Chart(ctx, {
+    // Hủy chart cũ nếu có
+    if (frequencyChartInstance) {
+        frequencyChartInstance.destroy();
+    }
+    frequencyChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: frequencyData.frequencies.map(f => f.toFixed(0) + ' Hz'),
@@ -567,6 +677,43 @@ function formatFileSize(bytes) {
     if (bytes === 0) return '0 B';
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+// Debug function for modal issues
+function debugModal() {
+    const modal = document.getElementById('progressModal');
+    console.log('Modal debug info:');
+    console.log('- Display:', modal.style.display);
+    console.log('- Classes:', modal.className);
+    console.log('- Aria-hidden:', modal.getAttribute('aria-hidden'));
+    console.log('- Body classes:', document.body.className);
+    
+    // Show force close button
+    document.getElementById('forceCloseModal').style.display = 'block';
+    document.getElementById('forceCloseModal').onclick = forceCloseModal;
+}
+
+// Force close modal function
+function forceCloseModal() {
+    console.log('Force closing modal...');
+    const modal = document.getElementById('progressModal');
+    
+    // Brute force approach
+    modal.style.display = 'none';
+    modal.classList.remove('show', 'fade');
+    modal.setAttribute('aria-hidden', 'true');
+    modal.removeAttribute('aria-modal');
+    modal.removeAttribute('role');
+    
+    // Remove all backdrops
+    document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+    
+    // Reset body
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+    
+    console.log('Modal force closed');
 }
 </script>
 {% endblock %}
