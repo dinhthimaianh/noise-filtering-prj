@@ -43,7 +43,7 @@ class AudioProcessingPipeline:
         
         logger.info(" Pipeline ready for high-performance processing")
     
-    def process_audio(self, noisy_input: np.ndarray, environment: str,
+    def process_audio(self, noisy_input, environment: str,
                      sample_rate: int = 44100) -> Dict[str, Any]:
         """
         OPTIMIZED 2-stage audio processing
@@ -64,33 +64,24 @@ class AudioProcessingPipeline:
         try:
 
             # ============ STAGE 2: FAST DSP PROCESSING ============ HIỂU CODE Ở ĐÂY
-            RATE = 16000
             FRAME_DURATION_MS = 20
-            FRAMES_PER_BUFFER = int(RATE * FRAME_DURATION_MS / 1000)  # 16000 Hz, 20 ms frames, 320 samples per frame
-            CHANNELS = 1
-            FORMAT_WIDTH = 2  # 16-bit PCM
-
+            FRAMES_PER_BUFFER = int(sample_rate * FRAME_DURATION_MS / 1000)  # 16000 Hz, 20 ms frames, 320 samples per frame
+            FORMAT_WIDTH = 2
             vad = webrtcvad.Vad(2)
-
-            audio_file_path = 'mixed_noisy_audio.wav'
-
-            sound = AudioSegment.from_file(audio_file_path)
-            sound = sound.set_channels(CHANNELS).set_frame_rate(RATE).set_sample_width(
-                FORMAT_WIDTH)  # Convert to mono, 16kHz, 16-bit PCM (AudioSegment)
-            audio_data = sound.raw_data  # Get raw audio data as bytes like b'\x1a\x2b\x00\xff...'
+            noisy_input = noisy_input.raw_data  # Get raw audio data as bytes like b'\x1a\x2b\x00\xff...'
             # WebRTC only accepts raw audio data in bytes, so we need to convert it to the right format, not accepting AudioSegment directly, or .wav files directly.
             # List to store ONLY the active speech chunks
             speech_frames = []
 
-            total_chunks = len(audio_data) // (FRAMES_PER_BUFFER * FORMAT_WIDTH)
+            total_chunks = len(noisy_input) // (FRAMES_PER_BUFFER * FORMAT_WIDTH)
 
             for i in range(total_chunks):
                 start_byte = i * (FRAMES_PER_BUFFER * FORMAT_WIDTH)
                 end_byte = start_byte + (FRAMES_PER_BUFFER * FORMAT_WIDTH)
-                chunk = audio_data[start_byte:end_byte]
+                chunk = noisy_input[start_byte:end_byte]
 
                 # Check for speech
-                is_active = vad.is_speech(chunk, sample_rate=RATE)
+                is_active = vad.is_speech(chunk, sample_rate=sample_rate)
 
                 # If the chunk is active, keep it. Otherwise, do nothing.
                 if is_active:
