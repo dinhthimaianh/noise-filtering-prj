@@ -33,7 +33,6 @@ class DSPProcessor:
             Enhanced audio signal
         """
         logger.info(f"DSP processing for {environment} environment")
-        logger.warning("USING BASE IMPLEMENTATION - NO ACTUAL PROCESSING")
         
         self.combined_noise_reduction(noisy_signal, sample_rate)
 
