@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 import webrtcvad
 import sys
 from pydub import AudioSegment
+from scipy.signal import butter, lfilter
 
 class AudioProcessingPipeline:
     """
@@ -70,9 +71,34 @@ class AudioProcessingPipeline:
             FORMAT_WIDTH = 2
             CHANNELS = 1
             vad = webrtcvad.Vad(2)
+            CUTOFF_FREQ = 7900  # Hz
+            FILTER_ORDER = 6
+
+            def butter_lowpass(cutoff, fs, order=5):
+                nyq = 0.5 * fs
+                norm_cutoff = cutoff / nyq
+                b, a = butter(order, norm_cutoff, btype='low', analog=False)
+                return b, a
+
+            def apply_lowpass_filter(data, cutoff, fs, order=5):
+                b, a = butter_lowpass(cutoff, fs, order=order)
+                return lfilter(b, a, data)
 
             noisy_input_original = noisy_input_original.set_channels(CHANNELS).set_frame_rate(sample_rate).set_sample_width(FORMAT_WIDTH)
-            noisy_input_original = noisy_input_original.raw_data  # Get raw audio data as bytes like b'\x1a\x2b\x00\xff...'
+            samples = np.frombuffer(noisy_input_original.raw_data, dtype=np.int16)
+            filtered_samples = apply_lowpass_filter(samples, cutoff=CUTOFF_FREQ, fs=RATE, order=FILTER_ORDER)
+
+            filtered_audio_data = filtered_samples.astype(np.int16).tobytes()
+
+            # Convert filtered data back to AudioSegment
+            sound = AudioSegment(
+                data=filtered_audio_data,
+                sample_width=FORMAT_WIDTH,
+                frame_rate=RATE,
+                channels=CHANNELS
+            )
+
+            noisy_input_original = sound.raw_data  # Get raw audio data as bytes like b'\x1a\x2b\x00\xff...'
             # WebRTC only accepts raw audio data in bytes, so we need to convert it to the right format, not accepting AudioSegment directly, or .wav files directly.
             # List to store ONLY the active speech chunks
             speech_frames = []
