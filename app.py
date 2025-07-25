@@ -7,6 +7,7 @@ from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import numpy as np
 import soundfile as sf
+from pydub import AudioSegment
 
 import logging
 import os
@@ -103,6 +104,7 @@ def process_audio():
             
             # Load audio (đã có nhiễu)
             noisy_input, sample_rate = sf.read(str(temp_input_path))
+            noisy_input_original = AudioSegment.from_file(str(temp_input_path))
             logger.info(f" Đã load audio: {audio_file.filename} ({len(noisy_input)} samples @ {sample_rate}Hz)")
             # Chuyển stereo thành mono nếu cần
             if len(noisy_input.shape) > 1:

@@ -7,6 +7,7 @@ import numpy as np
 import scipy.signal as signal
 import logging
 from utils.config import ENVIRONMENT_CONFIGS
+import librosa
 
 logger = logging.getLogger(__name__)
 

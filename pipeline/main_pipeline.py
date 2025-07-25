@@ -9,6 +9,9 @@ import time
 from typing import Dict, Any
 from pipeline.metrics import generate_quality_report
 logger = logging.getLogger(__name__)
+import webrtcvad
+import sys
+from pydub import AudioSegment
 
 class AudioProcessingPipeline:
     """
@@ -40,7 +43,7 @@ class AudioProcessingPipeline:
         
         logger.info(" Pipeline ready for high-performance processing")
     
-    def process_audio(self, noisy_input: np.ndarray, environment: str,
+    def process_audio(self, noisy_input: np.ndarray, noisy_input_original, environment: str,
                      sample_rate: int = 44100) -> Dict[str, Any]:
         """
         OPTIMIZED 2-stage audio processing
@@ -109,7 +112,7 @@ class AudioProcessingPipeline:
             final_output = self.dsp_processor.process(
                 noisy_signal=noisy_input,
                 environment=environment,
-                sample_rate=sample_rate
+                sample_rate=RATE #sample_rate
             )
             stage2_time = time.time() - stage2_start
             self.processing_times['stage2_dsp'] = stage2_time
