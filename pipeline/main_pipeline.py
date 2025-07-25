@@ -43,7 +43,7 @@ class AudioProcessingPipeline:
         
         logger.info(" Pipeline ready for high-performance processing")
     
-    def process_audio(self, noisy_input, environment: str,
+    def process_audio(self, noisy_input: np.ndarray, noisy_input_original, environment: str,
                      sample_rate: int = 44100) -> Dict[str, Any]:
         """
         OPTIMIZED 2-stage audio processing
@@ -64,24 +64,28 @@ class AudioProcessingPipeline:
         try:
 
             # ============ STAGE 2: FAST DSP PROCESSING ============ HIỂU CODE Ở ĐÂY
+            RATE = 16000
             FRAME_DURATION_MS = 20
-            FRAMES_PER_BUFFER = int(sample_rate * FRAME_DURATION_MS / 1000)  # 16000 Hz, 20 ms frames, 320 samples per frame
+            FRAMES_PER_BUFFER = int(RATE * FRAME_DURATION_MS / 1000)  # 16000 Hz, 20 ms frames, 320 samples per frame
             FORMAT_WIDTH = 2
+            CHANNELS = 1
             vad = webrtcvad.Vad(2)
-            noisy_input = noisy_input.raw_data  # Get raw audio data as bytes like b'\x1a\x2b\x00\xff...'
+
+            noisy_input_original = noisy_input_original.set_channels(CHANNELS).set_frame_rate(sample_rate).set_sample_width(FORMAT_WIDTH)
+            noisy_input_original = noisy_input_original.raw_data  # Get raw audio data as bytes like b'\x1a\x2b\x00\xff...'
             # WebRTC only accepts raw audio data in bytes, so we need to convert it to the right format, not accepting AudioSegment directly, or .wav files directly.
             # List to store ONLY the active speech chunks
             speech_frames = []
 
-            total_chunks = len(noisy_input) // (FRAMES_PER_BUFFER * FORMAT_WIDTH)
+            total_chunks = len(noisy_input_original) // (FRAMES_PER_BUFFER * FORMAT_WIDTH)
 
             for i in range(total_chunks):
                 start_byte = i * (FRAMES_PER_BUFFER * FORMAT_WIDTH)
                 end_byte = start_byte + (FRAMES_PER_BUFFER * FORMAT_WIDTH)
-                chunk = noisy_input[start_byte:end_byte]
+                chunk = noisy_input_original[start_byte:end_byte]
 
                 # Check for speech
-                is_active = vad.is_speech(chunk, sample_rate=sample_rate)
+                is_active = vad.is_speech(chunk, sample_rate=RATE)
 
                 # If the chunk is active, keep it. Otherwise, do nothing.
                 if is_active:
@@ -93,18 +97,26 @@ class AudioProcessingPipeline:
                     speech_frames.append(chunk)
                     # Code to load the inactive audio
 
+            final_audio_data = b''.join(speech_frames)
+            final_sound = AudioSegment(
+                data=final_audio_data,
+                sample_width=FORMAT_WIDTH,
+                frame_rate=RATE,
+                channels=1
+            )
+
             stage2_start = time.time()
             final_output = self.dsp_processor.process(
-                noisy_signal=noisy_input,
+                noisy_signal=noisy_input_original,
                 environment=environment,
-                sample_rate=sample_rate
+                sample_rate=RATE
             )
             stage2_time = time.time() - stage2_start
             self.processing_times['stage2_dsp'] = stage2_time
             
             # ============ FAST METRICS CALCULATION ============
             metrics_start = time.time()
-            metrics =  generate_quality_report(noisy_input, final_output)
+            metrics =  generate_quality_report(noisy_input_original, final_output)
             metrics_time = time.time() - metrics_start
             
             # ============ PERFORMANCE CALCULATION ============
@@ -114,14 +126,14 @@ class AudioProcessingPipeline:
             # ============ RESULTS ASSEMBLY ============
             results = {
                 # Audio stages
-                'input_noisy': noisy_input,
-                'mic_processed': noisy_input,
+                'input_noisy': noisy_input_original,
+                'mic_processed': noisy_input_original,
                 'final_output': final_output,
                 'estimated_clean': final_output,  # Use DSP output as clean estimate
                 
                 # Metadata
                 'environment': environment,
-                'sample_rate': sample_rate,
+                'sample_rate': RATE,
                 
                 # Performance metrics
                 'processing_metadata': {

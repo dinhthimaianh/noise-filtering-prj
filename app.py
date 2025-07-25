@@ -103,20 +103,14 @@ def process_audio():
             audio_file.save(str(temp_input_path))
             
             # Load audio (đã có nhiễu)
-            noisy_input, sample_rate = AudioSegment.from_file(str(temp_input_path))
+            noisy_input, sample_rate = sf.read(str(temp_input_path))
+            noisy_input_original = AudioSegment.from_file(str(temp_input_path))
             logger.info(f" Đã load audio: {audio_file.filename} ({len(noisy_input)} samples @ {sample_rate}Hz)")
 
             # Chuyển stereo thành mono nếu cần
-            # if len(noisy_input.shape) > 1:
-            #     noisy_input = np.mean(noisy_input, axis=1)
-            #     logger.info(" Chuyển đổi stereo thành mono")
-
-            CHANNELS = 1
-            FORMAT_WIDTH = 2
-
-            # Convert to mono, 16kHz, 16-bit PCM (AudioSegment)
-            noisy_input = noisy_input.set_channels(CHANNELS).set_frame_rate(sample_rate).set_sample_width(
-                FORMAT_WIDTH)
+            if len(noisy_input.shape) > 1:
+                noisy_input = np.mean(noisy_input, axis=1)
+                logger.info(" Chuyển đổi stereo thành mono")
             
             # Validate độ dài audio
             duration = len(noisy_input) / sample_rate
@@ -138,7 +132,8 @@ def process_audio():
         start_time = datetime.now()
         
         results = pipeline.process_audio(
-            noisy_input=noisy_input,
+            noisy_input=noisy_input_original,
+            noisy_input_original=noisy_input_original,
             environment=environment,
             # Remove: output_device=output_device,
             sample_rate=sample_rate
