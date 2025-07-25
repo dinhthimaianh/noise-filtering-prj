@@ -34,9 +34,9 @@ class DSPProcessor:
         """
         logger.info(f"DSP processing for {environment} environment")
         
-        self.combined_noise_reduction(noisy_signal, sample_rate)
+        final_signal = self.combined_noise_reduction(noisy_signal, sample_rate)
 
-        return noisy_signal
+        return final_signal
 
     def combined_noise_reduction(noisy, sr, noise_start=0.0, noise_duration=0.005):
         frame_length = int(noise_duration * sr)
