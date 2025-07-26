@@ -1,28 +1,38 @@
 """
-Stage 2: DSP Processor - BASE IMPLEMENTATION ONLY
-Team member will implement the actual algorithm
+Stage 2: DSP Processor - IMPLEMENTED NOISE FILTERING
+Actual noise reduction algorithms
 """
 
 import numpy as np
+import scipy.signal as signal
 import logging
+from utils.config import ENVIRONMENT_CONFIGS
 import librosa
 
 logger = logging.getLogger(__name__)
 
 class DSPProcessor:
     """
-    Base DSP processor - TO BE IMPLEMENTED BY TEAM MEMBER
-    This is just a placeholder structure
+    DSP processor with actual noise filtering algorithms
     """
     
     def __init__(self):
-        logger.info("DSP Processor initialized (BASE IMPLEMENTATION)")
-        # Team member will add their algorithm parameters here
- 
+        logger.info("DSP Processor initialized with noise filtering algorithms")
+        
+        # Spectral subtraction parameters
+        self.alpha = 2  # Over-subtraction factor
+        self.beta = 0.01  # Spectral floor
+        self.min_gain = 0.3  # Minimum gain for Wiener filter
+        self.frame_size = 2048
+        self.hop_size = 1024
+        
+        # Wiener filter parameters
+        self.noise_estimation_frames = 10  # First N frames for noise estimation
+        
     def process(self, noisy_signal: np.ndarray, environment: str, 
                sample_rate: int = 44100) -> np.ndarray:
         """
-        Main DSP processing function - TO BE IMPLEMENTED
+        Main DSP processing function with actual noise filtering
         
         Args:
             noisy_signal: Noisy audio from Stage 1
@@ -35,16 +45,17 @@ class DSPProcessor:
         logger.info(f"DSP processing for {environment} environment")
         
         final_signal = self.combined_noise_reduction(noisy_signal, sample_rate)
-
+        
         return final_signal
 
-    def combined_noise_reduction(noisy, sr, noise_start=0.0, noise_duration=0.005):
-        frame_length = int(noise_duration * sr)
+    def combined_noise_reduction(self, noisy, sr, noise_start=0.0, noise_duration=0.05):
+        frame_length = self.frame_size
         if frame_length > len(noisy):
             frame_length = len(noisy)
         hop_length = frame_length // 2
+        print(f"Frame length: {frame_length}, Hop length: {hop_length}")
 
-        # ----- Noise detection (auto or manual) -----
+        # # ----- Noise detection (auto or manual) -----
         energy = librosa.feature.rms(y=noisy, frame_length=frame_length, hop_length=hop_length)[0]
         low_energy_frames = np.where(energy < 0.01)[0]
 
@@ -55,7 +66,7 @@ class DSPProcessor:
             start_sample = int(noise_start * sr)
             end_sample = int((noise_start + noise_duration) * sr)
             noise_segment = noisy[start_sample:end_sample]
-
+    
         # ----- Step 1: Spectrum Subtraction -----
         stft_noisy = librosa.stft(noisy, n_fft=frame_length, hop_length=hop_length)
         noise_stft = librosa.stft(noise_segment, n_fft=frame_length, hop_length=hop_length)
@@ -64,14 +75,14 @@ class DSPProcessor:
         mag_noisy = np.abs(stft_noisy)
         phase = np.angle(stft_noisy)
 
-        # Subtract noise magnitude spectrum
-        mag_ss = mag_noisy - noise_mag
-        mag_ss = np.maximum(mag_ss, 1e-10)
+        # Subtract noise magnitude spectrum with over-subtraction and spectral floor
+        mag_ss = mag_noisy - self.alpha * noise_mag
+        mag_ss = np.maximum(mag_ss, self.beta * noise_mag)
 
         # ISTFT to get intermediate signal
         stft_ss = mag_ss * np.exp(1j * phase)
         ss_result = librosa.istft(stft_ss, hop_length=hop_length)
-
+      
         # ----- Step 2: Wiener Filtering on SS output -----
         stft_ss_again = librosa.stft(ss_result, n_fft=frame_length, hop_length=hop_length)
         mag_ss_again = np.abs(stft_ss_again)
@@ -82,6 +93,12 @@ class DSPProcessor:
 
         # Wiener gain function
         H = psd_ss / (psd_ss + noise_psd)
+        H = np.maximum(H, self.min_gain)
+        
+        # Smooth the Wiener gain over time
+        for i in range(1, H.shape[1]):
+            H[:, i] = 0.7 * H[:, i-1] + 0.3 * H[:, i]
+        
         mag_wiener = H * mag_ss_again
 
         # Final signal
@@ -89,4 +106,3 @@ class DSPProcessor:
         final_signal = librosa.istft(stft_final, hop_length=hop_length)
 
         return final_signal
-       

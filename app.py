@@ -106,7 +106,6 @@ def process_audio():
             noisy_input, sample_rate = sf.read(str(temp_input_path))
             noisy_input_original = AudioSegment.from_file(str(temp_input_path))
             logger.info(f" Đã load audio: {audio_file.filename} ({len(noisy_input)} samples @ {sample_rate}Hz)")
-
             # Chuyển stereo thành mono nếu cần
             if len(noisy_input.shape) > 1:
                 noisy_input = np.mean(noisy_input, axis=1)
@@ -132,7 +131,7 @@ def process_audio():
         start_time = datetime.now()
         
         results = pipeline.process_audio(
-            noisy_input=noisy_input_original,
+            noisy_input=noisy_input,
             noisy_input_original=noisy_input_original,
             environment=environment,
             # Remove: output_device=output_device,
@@ -142,27 +141,38 @@ def process_audio():
         processing_time = (datetime.now() - start_time).total_seconds()
         logger.info(f" Xử lý hoàn thành trong {processing_time:.3f}s")
         
-        # 5. Lưu các file kết quả
+        # 5. Lưu các file kết quả (bao gồm cả tín hiệu analog DAC) 
+        # (hiện giờ tín hiệu analog DAC đang comment code để dó thôi chứ chưa dùng)
         file_paths = {}
-        
+
         # Lưu input có nhiễu
         input_path = UPLOAD_FOLDER / f"input_noisy_{temp_id}.wav"
         sf.write(str(input_path), noisy_input, sample_rate)
         file_paths['input_noisy'] = f"/static/audio/input_noisy_{temp_id}.wav"
-        
+
         # Lưu sau Stage 1 (mic processed)
         mic_path = UPLOAD_FOLDER / f"mic_processed_{temp_id}.wav"
         sf.write(str(mic_path), results['mic_processed'], sample_rate)
         file_paths['mic_processed'] = f"/static/audio/mic_processed_{temp_id}.wav"
-        
-        # Lưu final output ( Stage 2)
+
+        # Lưu final output (Stage 2 - DSP)
         final_path = UPLOAD_FOLDER / f"final_output_{temp_id}.wav"
-        sf.write(str(final_path), results['final_output'], sample_rate)
+        analog_output = results['analog_output']
+        if isinstance(analog_output, AudioSegment):
+            analog_output_np = np.array(analog_output.get_array_of_samples()).astype(np.float32) / (2**15)
+            sf.write(str(final_path), analog_output_np, analog_output.frame_rate)
+        else:
+            sf.write(str(final_path), analog_output, sample_rate)
         file_paths['final_output'] = f"/static/audio/final_output_{temp_id}.wav"
+
+        # # Lưu analog_output (Stage 3 - DAC) - TẠM COMMENT
+        # analog_path = UPLOAD_FOLDER / f"analog_output_{temp_id}.wav"
+        # sf.write(str(analog_path), results['analog_output'], sample_rate)
+        # file_paths['analog_output'] = f"/static/audio/analog_output_{temp_id}.wav"
         
         # 6. Tính toán frequency response cho charts
         freq_input, mag_input = compute_frequency_response_fast(noisy_input, sample_rate)
-        freq_final, mag_final = compute_frequency_response_fast(results['final_output'], sample_rate)
+        freq_final, mag_final = compute_frequency_response_fast(results['analog_output'], sample_rate)
         
         # 7. Chuẩn bị response data (SIMPLIFIED)
         response_data = {

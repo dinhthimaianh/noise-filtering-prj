@@ -71,52 +71,112 @@ class AudioProcessingPipeline:
             CHANNELS = 1
             vad = webrtcvad.Vad(2)
 
-            noisy_input_original = noisy_input_original.set_channels(CHANNELS).set_frame_rate(sample_rate).set_sample_width(FORMAT_WIDTH)
+            noisy_input_original = noisy_input_original.set_channels(CHANNELS).set_frame_rate(RATE).set_sample_width(FORMAT_WIDTH)
             noisy_input_original = noisy_input_original.raw_data  # Get raw audio data as bytes like b'\x1a\x2b\x00\xff...'
             # WebRTC only accepts raw audio data in bytes, so we need to convert it to the right format, not accepting AudioSegment directly, or .wav files directly.
             # List to store ONLY the active speech chunks
-            speech_frames = []
-
-            total_chunks = len(noisy_input_original) // (FRAMES_PER_BUFFER * FORMAT_WIDTH)
-
-            for i in range(total_chunks):
-                start_byte = i * (FRAMES_PER_BUFFER * FORMAT_WIDTH)
-                end_byte = start_byte + (FRAMES_PER_BUFFER * FORMAT_WIDTH)
-                chunk = noisy_input_original[start_byte:end_byte]
-
-                # Check for speech
-                is_active = vad.is_speech(chunk, sample_rate=RATE)
-
-                # If the chunk is active, keep it. Otherwise, do nothing.
-                if is_active:
-                    speech_frames.append(chunk)
-                    # type <class 'bytes'> \x1a\x2b\x00\xff
-                    # DSP (A Nhan)
-                    # DAC (A Hoc)
-                else:
-                    speech_frames.append(chunk)
-                    # Code to load the inactive audio
-
-            final_audio_data = b''.join(speech_frames)
-            final_sound = AudioSegment(
-                data=final_audio_data,
-                sample_width=FORMAT_WIDTH,
-                frame_rate=RATE,
-                channels=1
-            )
+            #   
+            # final_frames = []
+            # analog_frames = []
+            # buffer = np.array([], dtype=np.float32)
+            # frame_size = self.dsp_processor.frame_size
+            # total_chunks = len(noisy_input_original) // (FRAMES_PER_BUFFER * FORMAT_WIDTH)
 
             stage2_start = time.time()
+
+            # for i in range(total_chunks):
+            #     start_byte = i * (FRAMES_PER_BUFFER * FORMAT_WIDTH)
+            #     end_byte = start_byte + (FRAMES_PER_BUFFER * FORMAT_WIDTH)
+            #     chunk = noisy_input_original[start_byte:end_byte]
+            #     noisy_signal_chunk = np.frombuffer(chunk, dtype=np.int16).astype(np.float32)
+            #     buffer = np.concatenate([buffer, noisy_signal_chunk])
+
+                # is_active = vad.is_speech(chunk, sample_rate=RATE)
+                # if is_active:
+                #     while len(buffer) >= frame_size:
+                #         process_chunk = buffer[:frame_size]
+                #         final_output_chunk = self.dsp_processor.process(
+                #             noisy_signal=process_chunk,
+                #             environment=environment,
+                #             sample_rate=RATE
+                #         )
+                #         final_output_bytes = (
+                #             np.clip(final_output_chunk, -32768, 32767)
+                #             .astype(np.int16)
+                #             .tobytes()
+                #         )
+                #         final_frames.append(final_output_bytes)
+
+                #         from pipeline.stages.reconstruction import ReconstructionFilter
+                #         reconstructor = ReconstructionFilter()
+                #         analog_output_chunk = reconstructor.process(final_output_chunk, environment=environment, sample_rate=RATE)
+                #         analog_output_bytes = (
+                #             np.clip(analog_output_chunk, -32768, 32767)
+                #             .astype(np.int16)
+                #             .tobytes()
+                #         )
+                #         analog_frames.append(analog_output_bytes)
+                #         buffer = buffer[frame_size:]  # bỏ phần đã xử lý
+                # else:
+                #     final_frames.append(chunk)
+                #     analog_frames.append(chunk)
+
+            # Xử lý phần còn lại của buffer (nếu có)
+            # if len(buffer) > 0:
+            #     pad_length = frame_size - len(buffer)
+            #     padded_chunk = np.pad(buffer, (0, pad_length), mode='constant')
+            #     final_output_chunk = self.dsp_processor.process(
+            #         noisy_signal=padded_chunk,
+            #         environment=environment,
+            #         sample_rate=RATE
+            #     )
+            #     final_output_bytes = (
+            #         np.clip(final_output_chunk, -32768, 32767)
+            #         .astype(np.int16)
+            #         .tobytes()
+            #     )
+            #     final_frames.append(final_output_bytes)
+
+            #     from pipeline.stages.reconstruction import ReconstructionFilter
+            #     reconstructor = ReconstructionFilter()
+            #     analog_output_chunk = reconstructor.process(final_output_chunk, environment=environment, sample_rate=RATE)
+            #     analog_output_bytes = (
+            #         np.clip(analog_output_chunk, -32768, 32767)
+            #         .astype(np.int16)
+            #         .tobytes()
+            #     )
+            #     analog_frames.append(analog_output_bytes)
+            # final_audio_data = b''.join(final_frames)
+            # final_output = AudioSegment(
+            #     data=final_audio_data,
+            #     sample_width=FORMAT_WIDTH,
+            #     frame_rate=RATE,
+            #     channels=1
+            # )
+
+            # analog_audio_data = b''.join(analog_frames)  # Use analog_frames, not final_frames!
+            # analog_output = AudioSegment(
+            #     data=analog_audio_data,
+            #     sample_width=FORMAT_WIDTH,
+            #     frame_rate=RATE,
+            #     channels=1
+            # )
+
             final_output = self.dsp_processor.process(
-                noisy_signal=noisy_input_original,
+                noisy_signal=noisy_input,
                 environment=environment,
                 sample_rate=RATE
             )
+            from pipeline.stages.reconstruction import ReconstructionFilter
+            reconstructor = ReconstructionFilter()
+            analog_output = reconstructor.process(final_output, environment=environment, sample_rate=RATE)
+            
             stage2_time = time.time() - stage2_start
             self.processing_times['stage2_dsp'] = stage2_time
             
             # ============ FAST METRICS CALCULATION ============
             metrics_start = time.time()
-            metrics =  generate_quality_report(noisy_input_original, final_output)
+            metrics =  generate_quality_report(noisy_input, final_output)
             metrics_time = time.time() - metrics_start
             
             # ============ PERFORMANCE CALCULATION ============
@@ -126,15 +186,16 @@ class AudioProcessingPipeline:
             # ============ RESULTS ASSEMBLY ============
             results = {
                 # Audio stages
-                'input_noisy': noisy_input_original,
-                'mic_processed': noisy_input_original,
+                'input_noisy': noisy_input,
+                'mic_processed': noisy_input,
                 'final_output': final_output,
                 'estimated_clean': final_output,  # Use DSP output as clean estimate
-                
+                'analog_output': analog_output,   # Thêm tín hiệu analog (DAC) để app.py lưu file
+
                 # Metadata
                 'environment': environment,
                 'sample_rate': RATE,
-                
+
                 # Performance metrics
                 'processing_metadata': {
                     'total_processing_time': total_time,
@@ -145,7 +206,7 @@ class AudioProcessingPipeline:
                     'audio_duration_s': audio_duration,
                     'processing_efficiency_percent': (audio_duration / total_time) * 100,
                 },
-                
+
                 # Quality metrics
                 'quality_metrics': metrics
             }
