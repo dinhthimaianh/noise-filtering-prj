@@ -48,7 +48,7 @@ class DSPProcessor:
         
         return final_signal
 
-    def combined_noise_reduction(self, noisy, sr, noise_start=0.0, noise_duration=0.05):
+    def combined_noise_reduction(self, noisy, sr, noise_start=0.0, noise_duration=0.5):
         frame_length = self.frame_size
         if frame_length > len(noisy):
             frame_length = len(noisy)
