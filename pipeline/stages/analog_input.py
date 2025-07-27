@@ -1,6 +1,6 @@
 """
  Stage 1: Analog Input - OPTIMIZED VERSION
-Fast microphone characteristics simulation
+NOT USED IN PRODUCTION
 """
 
 import numpy as np

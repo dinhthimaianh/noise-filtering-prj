@@ -23,7 +23,7 @@ from utils.audio_utils import analyze_audio_properties_fast, compute_frequency_r
 
 # Khởi tạo Flask app
 app = Flask(__name__)
-app.secret_key = 'noise-filtering-demo-secret-key-2024'
+app.secret_key = 'noise-filtering-demo-secret-key-2025'
 CORS(app)
 
 # Cấu hình logging
@@ -60,8 +60,6 @@ def get_environments():
                 'id': env_id,
                 'name': config['name'],
                 'description': config['description'],
-                'target_snr_db': config['target_snr_db'],
-                'characteristics': config['characteristics']
             })
         
         return jsonify({
